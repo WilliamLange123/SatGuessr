@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Zoom-ud Geografispil</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <style>
+        html, body { height: 100%; margin: 0; }
+        body {
+            display: flex; flex-direction: column;
+            height: 100vh; height: 100dvh;
+            font-family: sans-serif; text-align: center;
+            background: #111; color: #fff;
+        }
+        header { padding: 6px 10px; }
+        h1 { font-size: 22px; margin: 2px 0; }
+        #map { flex: 1; min-height: 0; pointer-events: none; }
+        footer { padding: 8px 12px 12px; }
+        input[type=text], button { font-size: 18px; padding: 8px 14px; margin: 4px; }
+        button:disabled, input:disabled { opacity: 0.4; cursor: not-allowed; }
+        label { margin: 0 10px; font-size: 16px; cursor: pointer; }
+        #besked { font-size: 20px; min-height: 28px; margin-top: 4px; }
+        #hint { font-size: 18px; min-height: 24px; color: #ffd166; }
+    </style>
+</head>
+<body>
+<header>
+    <h1>Hvilken by er det?</h1>
+    <div>
+        Point: <span id="point">0</span> |
+        Mulige point lige nu: <span id="mulige"></span>
+    </div>
+</header>
+
+<div id="map"></div>
+
+<footer>
+    <input id="gaet" type="text" placeholder="Skriv bynavn...">
+    <button id="gaetKnap">Gæt</button>
+    <button id="zoomUdKnap">Zoom ud 🔍</button>
+    <button id="givOpKnap">Giv op 🏳️</button>
+    <button id="naesteKnap" style="display:none">Næste by</button>
+    <div>
+        <label><input type="checkbox" id="visAfstand"> Vis afstand</label>
+        <label><input type="checkbox" id="visRetning"> Vis retning</label>
+    </div>
+    <div id="besked"></div>
+    <div id="hint"></div>
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    // ---- Hjælpefunktion: by(navn, breddegrad, længdegrad, ...andre stavemåder) ----
+    function by(navn, lat, lng, ...alternativer) {
+        return { navn: navn, svar: [navn, ...alternativer], lat: lat, lng: lng };
+    }
+
+    // ---- Alle byer. Tilføj flere ved at skrive en ny linje! ----
+    const alleByer = [
+        // Europa
+        by("København", 55.6761, 12.5683, "copenhagen", "kobenhavn"),
+        by("London", 51.5074, -0.1278),
+        by("Paris", 48.8566, 2.3522),
+        by("Berlin", 52.5200, 13.4050),
+        by("Madrid", 40.4168, -3.7038),
+        by("Rom", 41.9028, 12.4964, "rome", "roma"),
+        by("Amsterdam", 52.3676, 4.9041),
+        by("Wien", 48.2082, 16.3738, "vienna"),
+        by("Stockholm", 59.3293, 18.0686),
+        by("Oslo", 59.9139, 10.7522),
+        by("Helsinki", 60.1699, 24.9384),
+        by("Prag", 50.0755, 14.4378, "prague", "praha"),
+        by("Warszawa", 52.2297, 21.0122, "warsaw", "varsova"),
+        by("Budapest", 47.4979, 19.0402),
+        by("Athen", 37.9838, 23.7275, "athens"),
+        by("Lissabon", 38.7223, -9.1393, "lisbon"),
+        by("Istanbul", 41.0082, 28.9784),
+        by("Moskva", 55.7558, 37.6173, "moscow"),
+        by("Dublin", 53.3498, -6.2603),
+        by("Bruxelles", 50.8503, 4.3517, "brussels"),
+        by("Zürich", 47.3769, 8.5417, "zurich"),
+        by("Edinburgh", 55.9533, -3.1883),
+        by("Barcelona", 41.3851, 2.1734),
+        by("Milano", 45.4642, 9.1900, "milan"),
+        by("Venedig", 45.4408, 12.3155, "venice", "venezia"),
+        by("Kyiv", 50.4501, 30.5234, "kiev"),
+
+        // Asien og Mellemøsten
+        by("Tokyo", 35.6762, 139.6503),
+        by("Osaka", 34.6937, 135.5023),
+        by("Beijing", 39.9042, 116.4074, "peking"),
+        by("Shanghai", 31.2304, 121.4737),
+        by("Hongkong", 22.3193, 114.1694, "hong kong"),
+        by("Seoul", 37.5665, 126.9780),
+        by("Taipei", 25.0330, 121.5654),
+        by("Bangkok", 13.7563, 100.5018),
+        by("Singapore", 1.3521, 103.8198),
+        by("Kuala Lumpur", 3.1390, 101.6869),
+        by("Jakarta", -6.2088, 106.8456),
+        by("Manila", 14.5995, 120.9842),
+        by("Hanoi", 21.0285, 105.8542),
+        by("Mumbai", 19.0760, 72.8777, "bombay"),
+        by("Delhi", 28.6139, 77.2090, "new delhi"),
+        by("Karachi", 24.8607, 67.0011),
+        by("Dhaka", 23.8103, 90.4125, "dacca"),
+        by("Kathmandu", 27.7172, 85.3240),
+        by("Dubai", 25.2048, 55.2708),
+        by("Riyadh", 24.7136, 46.6753),
+        by("Teheran", 35.6892, 51.3890, "tehran"),
+        by("Tel Aviv", 32.0853, 34.7818),
+        by("Jerusalem", 31.7683, 35.2137),
+
+        // Afrika
+        by("Kairo", 30.0444, 31.2357, "cairo"),
+        by("Lagos", 6.5244, 3.3792),
+        by("Nairobi", -1.2921, 36.8219),
+        by("Cape Town", -33.9249, 18.4241, "kapstaden"),
+        by("Johannesburg", -26.2041, 28.0473),
+        by("Casablanca", 33.5731, -7.5898),
+        by("Marrakech", 31.6295, -7.9811, "marrakesh"),
+        by("Addis Abeba", 9.0300, 38.7400, "addis ababa"),
+        by("Accra", 5.6037, -0.1870),
+        by("Dakar", 14.7167, -17.4677),
+        by("Tunis", 36.8065, 10.1815),
+        by("Algier", 36.7538, 3.0588, "algiers", "alger"),
+
+        // Nordamerika og Mellemamerika
+        by("New York", 40.7128, -74.0060, "new york city", "nyc"),
+        by("Los Angeles", 34.0522, -118.2437, "la"),
+        by("Chicago", 41.8781, -87.6298),
+        by("San Francisco", 37.7749, -122.4194),
+        by("Miami", 25.7617, -80.1918),
+        by("Las Vegas", 36.1699, -115.1398),
+        by("Washington", 38.9072, -77.0369, "washington dc", "washington d.c."),
+        by("Toronto", 43.6532, -79.3832),
+        by("Vancouver", 49.2827, -123.1207),
+        by("Montreal", 45.5017, -73.5673),
+        by("Mexico City", 19.4326, -99.1332, "mexico by", "ciudad de mexico"),
+        by("Havana", 23.1136, -82.3666, "la habana", "habana"),
+        by("Panama City", 8.9824, -79.5199, "panama by"),
+
+        // Sydamerika
+        by("Bogotá", 4.7110, -74.0721, "bogota"),
+        by("Lima", -12.0464, -77.0428),
+        by("Santiago", -33.4489, -70.6693),
+        by("Buenos Aires", -34.6037, -58.3816),
+        by("Rio de Janeiro", -22.9068, -43.1729, "rio"),
+        by("São Paulo", -23.5505, -46.6333, "sao paulo"),
+        by("Brasília", -15.7939, -47.8828, "brasilia"),
+        by("Quito", -0.1807, -78.4678),
+        by("Caracas", 10.4806, -66.9036),
+
+        // Oceanien
+        by("Sydney", -33.8688, 151.2093),
+        by("Melbourne", -37.8136, 144.9631),
+        by("Brisbane", -27.4698, 153.0251),
+        by("Perth", -31.9505, 115.8605),
+        by("Auckland", -36.8485, 174.7633),
+        by("Wellington", -41.2866, 174.7756)
+    ];
+
+    // ---- Indstillinger ----
+    const START_ZOOM = 18;  // meget tæt på
+    const MIN_ZOOM = 3;     // næsten hele kloden
+
+    // ---- Kortet (spilleren kan ikke flytte eller zoome selv) ----
+    const kort = L.map("map", {
+        zoomControl: false, dragging: false, scrollWheelZoom: false,
+        doubleClickZoom: false, touchZoom: false, boxZoom: false, keyboard: false
+    });
+
+    L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        { maxZoom: 18, attribution: "Tiles © Esri" }
+    ).addTo(kort);
+
+    // Når vinduet ændrer størrelse, skal kortet tilpasse sig
+    window.addEventListener("resize", () => kort.invalidateSize());
+
+    // ---- Gør tekst ens: små bogstaver, ingen accenter, æ/ø/å forenklet ----
+    function rens(tekst) {
+        return tekst
+            .toLowerCase()
+            .replace(/æ/g, "ae")
+            .replace(/ø/g, "o")
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // fjerner accenter, og å -> a
+            .replace(/\s+/g, " ")
+            .trim();
+    }
+
+    // ---- Afstand (i km, luftlinje) mellem to punkter ----
+    function afstandKm(lat1, lng1, lat2, lng2) {
+        const R = 6371;
+        const rad = d => d * Math.PI / 180;
+        const dLat = rad(lat2 - lat1);
+        const dLng = rad(lng2 - lng1);
+        const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLng / 2) ** 2;
+        return 2 * R * Math.asin(Math.sqrt(a));
+    }
+
+    // ---- Retning fra punkt 1 mod punkt 2 ----
+    function retning(lat1, lng1, lat2, lng2) {
+        const rad = d => d * Math.PI / 180;
+        const dLng = rad(lng2 - lng1);
+        const y = Math.sin(dLng) * Math.cos(rad(lat2));
+        const x = Math.cos(rad(lat1)) * Math.sin(rad(lat2)) -
+            Math.sin(rad(lat1)) * Math.cos(rad(lat2)) * Math.cos(dLng);
+        const grader = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+        const retninger = [
+            ["nord", "⬆️"], ["nordøst", "↗️"], ["øst", "➡️"], ["sydøst", "↘️"],
+            ["syd", "⬇️"], ["sydvest", "↙️"], ["vest", "⬅️"], ["nordvest", "↖️"]
+        ];
+        return retninger[Math.round(grader / 45) % 8];
+    }
+
+    // ---- Bunke med byer (blandes, så man ikke får samme by to gange i træk) ----
+    let bunke = [];
+    function traekBy() {
+        if (bunke.length === 0) {
+            bunke = [...alleByer];
+            for (let i = bunke.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [bunke[i], bunke[j]] = [bunke[j], bunke[i]];
+            }
+        }
+        return bunke.pop();
+    }
+
+    // ---- Spiltilstand ----
+    let nuvaerende, zoom, point = 0, rundeSlut = false, harGaettet = false;
+
+    const gaetFelt = document.getElementById("gaet");
+    const gaetKnap = document.getElementById("gaetKnap");
+    const zoomUdKnap = document.getElementById("zoomUdKnap");
+    const givOpKnap = document.getElementById("givOpKnap");
+    const naesteKnap = document.getElementById("naesteKnap");
+    const besked = document.getElementById("besked");
+    const hintFelt = document.getElementById("hint");
+    const visAfstand = document.getElementById("visAfstand");
+    const visRetning = document.getElementById("visRetning");
+
+    function muligePoint() {
+        return zoom - MIN_ZOOM + 1; // jo mere zoomet ind, jo flere point
+    }
+
+    function laasGaet(laast) {
+        gaetFelt.disabled = laast;
+        gaetKnap.disabled = laast;
+    }
+
+    function nyRunde() {
+        nuvaerende = traekBy();
+        zoom = START_ZOOM;
+        rundeSlut = false;
+        harGaettet = false;
+        kort.invalidateSize();
+        kort.setView([nuvaerende.lat, nuvaerende.lng], zoom, { animate: false });
+        document.getElementById("mulige").textContent = muligePoint();
+        besked.textContent = "";
+        hintFelt.textContent = "";
+        gaetFelt.value = "";
+        laasGaet(false);
+        gaetFelt.focus();
+        gaetKnap.style.display = "inline";
+        zoomUdKnap.style.display = "inline";
+        givOpKnap.style.display = "inline";
+        naesteKnap.style.display = "none";
+    }
+
+    function zoomUd() {
+        if (rundeSlut || zoom <= MIN_ZOOM) return;
+        zoom--;
+        kort.setZoom(zoom);
+        document.getElementById("mulige").textContent = muligePoint();
+        harGaettet = false;   // nyt zoom-niveau = nyt gæt
+        laasGaet(false);
+        gaetFelt.value = "";
+        gaetFelt.focus();
+        besked.textContent = "";  // hintet bliver stående!
+        if (zoom === MIN_ZOOM) {
+            zoomUdKnap.style.display = "none"; // længere ud kan man ikke
+        }
+    }
+
+    // Laver teksten med afstand og/eller retning til et forkert gæt
+    function lavHint(gaettetBy) {
+        const vilHaveAfstand = visAfstand.checked;
+        const vilHaveRetning = visRetning.checked;
+        if (!vilHaveAfstand && !vilHaveRetning) return "";
+
+        if (!gaettetBy) {
+            return "Jeg kender ikke den by, så ingen hint.";
+        }
+
+        const dele = [];
+        if (vilHaveAfstand) {
+            const km = afstandKm(gaettetBy.lat, gaettetBy.lng, nuvaerende.lat, nuvaerende.lng);
+            dele.push("Afstand: ca. " + Math.round(km).toLocaleString("da-DK") + " km");
+        }
+        if (vilHaveRetning) {
+            const [navn, pil] = retning(gaettetBy.lat, gaettetBy.lng, nuvaerende.lat, nuvaerende.lng);
+            dele.push("Retning: " + pil + " " + navn);
+        }
+        return "Hint fra " + gaettetBy.navn + ": " + dele.join(" | ");
+    }
+
+    function gaet() {
+        if (rundeSlut || harGaettet) return;
+        const tekst = rens(gaetFelt.value);
+        if (!tekst) return;
+
+        harGaettet = true;
+        hintFelt.textContent = "";   // det gamle hint forsvinder, når man laver et nyt gæt
+        const rigtigt = nuvaerende.svar.some(s => rens(s) === tekst);
+
+        if (rigtigt) {
+            const faaet = muligePoint();
+            point += faaet;
+            document.getElementById("point").textContent = point;
+            afslutRunde("Rigtigt! Det er " + nuvaerende.navn + " (+" + faaet + " point)");
+        } else if (zoom === MIN_ZOOM) {
+            afslutRunde("Forkert! Svaret var: " + nuvaerende.navn + " (0 point)");
+        } else {
+            // Find den by, spilleren gættede på (hvis den er på listen)
+            const gaettetBy = alleByer.find(b => b.svar.some(s => rens(s) === tekst));
+            laasGaet(true);
+            besked.textContent = "Forkert! Zoom ud for et nyt gæt.";
+            hintFelt.textContent = lavHint(gaettetBy);
+        }
+    }
+
+    function givOp() {
+        if (rundeSlut) return;
+        afslutRunde("Du gav op. Svaret var: " + nuvaerende.navn + " (0 point)");
+    }
+
+    function afslutRunde(tekst) {
+        rundeSlut = true;
+        laasGaet(true);
+        besked.textContent = tekst;
+        gaetKnap.style.display = "none";
+        zoomUdKnap.style.display = "none";
+        givOpKnap.style.display = "none";
+        naesteKnap.style.display = "inline";
+    }
+
+    gaetKnap.addEventListener("click", gaet);
+    zoomUdKnap.addEventListener("click", zoomUd);
+    givOpKnap.addEventListener("click", givOp);
+    naesteKnap.addEventListener("click", nyRunde);
+    gaetFelt.addEventListener("keydown", e => { if (e.key === "Enter") gaet(); });
+
+    nyRunde();
+</script>
+</body>
+</html>
