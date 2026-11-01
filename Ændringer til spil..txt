@@ -1,0 +1,14 @@
+Ændringer til spil.
+
+Lav en let version der kun har de største/mest kendte byer i verden
+
+Lav en medium version der har endnu flere byer
+
+Lav en hard version med alle lande i verden. Der må også gerne være flere byer fra samme land.
+
+Lav en seværdigheder version med kendte seværdigheder.
+
+Tilføje mulighed for at zoom-ind efter man har gættet hvis man vil se det første billede.
+
+
+
